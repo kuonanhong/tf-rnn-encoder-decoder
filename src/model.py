@@ -44,6 +44,13 @@ with graph.as_default():
     w_prime = tf.Variable(tf.truncated_normal([1000, 500], -0.1, 0.1))
     u_prime = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
     C = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
+    # Decoder maxout calculation
+    oh = tf.Variable(tf.truncated_normal([2000, 1000], -0.1, 0,1))
+    oy = tf.Variable(tf.truncated_normal([2000, 1000], -0.1, 0, 1))
+    oc = tf.Variable(tf.truncated_normal([2000, 1000], -0.1, 0, 1))
+    # Decoder output
+    gl = tf.Variable(tf.truncated_normal([k, 1000], -0.1, 0, 1))
+    gr = tf.Variable(tf.truncated_normal([500, 1000], -0.1, 0, 1))
 
     # Encoder
     h_previous = tf.zeros([1000])
@@ -61,7 +68,7 @@ with graph.as_default():
         # Reset calculation
         r = tf.zeros([1000])
         for j in range(1000):
-            rj = tf.sigmoid(tf.slice(wr_e, [j], [1]) + tf.slice(ur_ht_previous, [j], [1]))
+            rj = tf.sigmoid(tf.slice(wr_e, [j], [1]) + tf.slice(ur_ht_previous, [j], [1])) #TODO: j+1????
             r = r + tf.sparse_tensor_to_dense(tf.SparseTensor([j], [rj], [1000]))
 
         # Vectors for h~ calculation
@@ -116,3 +123,15 @@ with graph.as_default():
             h_prime_j_tilde = tf.tanh(tf.slice(w_e, [j], [1]) + r_prime_j * tf.slice(u_h_previous + C_c, [j], [1]))
             h_prime_j = z_prime_j*tf.slice(h_prime_previous, [j], [1]) + (1-z_prime_j)*h_prime_j_tilde
             h_prime = h_prime + tf.sparse_tensor_to_dense(tf.SparseTensor([j], [h_prime_j], [1000]))
+
+        # Maxout calculation
+        s_prime = tf.matmul(oh, h_prime) + tf.matmul(oy, y_previous) + tf.matmul(oc, c)
+        s = tf.zeros([1000])
+        for i in range(1000):
+            s_i = max(tf.slice(s, [2*i-1], [1]), tf.slice(s, [2*i], [1]))
+            s = s + tf.sparse_tensor_to_dense(tf.SparseTensor([i], [s_i], [1000]))
+
+        # Softmax calculation
+        g = tf.matmul(gl, gr)
+
+        h_prime_previous = h_prime
