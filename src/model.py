@@ -28,23 +28,35 @@ with graph.as_default():
     u = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
     # Encoder representation weight
     v = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
-    # Decoder input
-    w_prime_e = tf.Variable(tf.truncated_normal([500, k], -0.1, 0.1))
     # Decoder representation weight
     v_prime = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
+    # Decoder input
+    w_prime_e = tf.Variable(tf.truncated_normal([500, k], -0.1, 0.1))
+    # Decoder update gate
+    w_prime_z = tf.Variable(tf.truncated_normal([1000, 500], -0.1, 0.1))
+    u_prime_z = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
+    Cz = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
+    # Decoder reset gate
+    w_prime_r = tf.Variable(tf.truncated_normal([1000, 500], -0.1, 0.1))
+    u_prime_r = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
+    Cr = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
+    # Decoder h~ [find name]
+    w_prime = tf.Variable(tf.truncated_normal([1000, 500], -0.1, 0.1))
+    u_prime = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
+    C = tf.Variable(tf.truncated_normal([1000, 1000], -0.1, 0.1))
 
     # Encoder
-    ht_previous = tf.zeros([1000])
+    h_previous = tf.zeros([1000])
     for t in range(N):
         # Current vector and its embedding
         xt = tf.reshape(tf.slice(N, [t, 0], [1, k]), [k])
         e = tf.matmul(we, xt)
         # Vectors for reset calculation
         wr_e = tf.matmul(wr, e)
-        ur_ht_previous = tf.matmul(ur, ht_previous)
+        ur_ht_previous = tf.matmul(ur, h_previous)
         # Vectors for update calculation
         wz_e = tf.matmul(wz, e)
-        uz_ht_previous = tf.matmul(wz, ht_previous)
+        uz_ht_previous = tf.matmul(wz, h_previous)
 
         # Reset calculation
         r = tf.zeros([1000])
@@ -56,21 +68,51 @@ with graph.as_default():
         w_e = tf.matmul(w, e)
         r_ewm_h_previous = tf.zeros([1000])
         for j in range (1000):
-            ewm = tf.slice(r, [j], [1]) * tf.slice(ht_previous, [j], [1])
+            ewm = tf.slice(r, [j], [1]) * tf.slice(h_previous, [j], [1])
             r_ewm_h_previous = r_ewm_h_previous + tf.sparse_tensor_to_dense(tf.SparseTensor([j], [ewm], [1000]))
         u_r_ewm_h_previous = tf.matmul(u, r_ewm_h_previous)
 
         # Hidden calculation
-        ht = tf.zeros([1000])
+        h = tf.zeros([1000])
         for j in range(1000):
             #Update calculation
             zj = tf.sigmoid(tf.slice(wz_e, [j], [1]) + tf.slice(uz_ht_previous, [j], [1]))
             #h~ calculation
             hj_tilde = tf.tanh(tf.slice(w_e, [j], [1]) + tf.slice(u_r_ewm_h_previous, [j], [1]))
 
-            hj = zj*tf.slice(ht_previous, [j], [1]) + (1-zj)*hj_tilde
-            ht = ht + tf.sparse_tensor_to_dense(tf.SparseTensor([j], [hj], [1000]))
+            hj = zj*tf.slice(h_previous, [j], [1]) + (1-zj)*hj_tilde
+            h = h + tf.sparse_tensor_to_dense(tf.SparseTensor([j], [hj], [1000]))
 
-        ht_previous = ht
+        h_previous = h
+    c = tf.tanh(tf.matmul(v, h_previous))
 
-    c = tf.tanh(tf.matmul(v, ht_previous))
+    # Decoder
+    continue_sentence = True
+    y_previous = tf.zeros([k])
+    h_prime_previous = tf.tanh(tf.matmul(v_prime, c))
+    while (continue_sentence):
+        # Current vector's embedding
+        e = tf.matmul(w_prime_e, y_previous)
+        # Vectors for h~ calculation
+        w_e = tf.matmul(w_prime, e)
+        u_h_previous = tf.matmul(u_prime, h_prime_previous)
+        C_c = tf.matmul(C, c)
+        # Vectors for reset calculation
+        wr_e = tf.matmul(w_prime_r, e)
+        ur_ht_previous = tf.matmul(u_prime_r, h_previous)
+        Cr_c = tf.matmul(Cr, c)
+        # Vectors for update calculation
+        wz_e = tf.matmul(w_prime_z, e)
+        uz_ht_previous = tf.matmul(w_prime_z, h_previous)
+        Cz_c = tf.matmul(Cz, c)
+
+        # Hidden calculation
+        h_prime = tf.zeros([1000])
+        for j in range(1000):
+            r_prime_j = tf.sigmoid(tf.slice(wr_e, [j], [1]) + tf.slice(u_h_previous, [j], [1])
+                                   + tf.slice(Cr_c, [j], 1))
+            z_prime_j = tf.sigmoid(tf.slice(wz_e, [j], [1]) + tf.slice(uz_ht_previous, [j], [1])
+                                   + tf.slice(Cz_c, [j], [1]))
+            h_prime_j_tilde = tf.tanh(tf.slice(w_e, [j], [1]) + r_prime_j * tf.slice(u_h_previous + C_c, [j], [1]))
+            h_prime_j = z_prime_j*tf.slice(h_prime_previous, [j], [1]) + (1-z_prime_j)*h_prime_j_tilde
+            h_prime = h_prime + tf.sparse_tensor_to_dense(tf.SparseTensor([j], [h_prime_j], [1000]))
