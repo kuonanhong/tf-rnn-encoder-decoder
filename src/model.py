@@ -14,7 +14,7 @@ graph = tf.Graph()
 with graph.as_default():
     # Variables
     # Encoder input
-    N = tf.placeholder(tf.float32, shape=(), name="N")
+    N = tf.placeholder(tf.int32, name="N") #TODO: "extract" value from here
     X = tf.placeholder(tf.float32, shape=[N, k])
     we = tf.Variable(tf.truncated_normal([500, k], -0.1, 0.1))
     # Encoder update gate
@@ -49,7 +49,7 @@ with graph.as_default():
     oy = tf.Variable(tf.truncated_normal([2000, 1000], -0.1, 0, 1))
     oc = tf.Variable(tf.truncated_normal([2000, 1000], -0.1, 0, 1))
     # Decoder output
-    gl = tf.Variable(tf.truncated_normal([k, 1000], -0.1, 0, 1))
+    gl = tf.Variable(tf.truncated_normal([k, 500], -0.1, 0, 1))
     gr = tf.Variable(tf.truncated_normal([500, 1000], -0.1, 0, 1))
 
     # Encoder
@@ -68,13 +68,15 @@ with graph.as_default():
         # Reset calculation
         r = tf.zeros([1000])
         for j in range(1000):
-            rj = tf.sigmoid(tf.slice(wr_e, [j], [1]) + tf.slice(ur_ht_previous, [j], [1])) #TODO: j+1????
+            j = j + 1
+            rj = tf.sigmoid(tf.slice(wr_e, [j], [1]) + tf.slice(ur_ht_previous, [j], [1]))
             r = r + tf.sparse_tensor_to_dense(tf.SparseTensor([j], [rj], [1000]))
 
         # Vectors for h~ calculation
         w_e = tf.matmul(w, e)
         r_ewm_h_previous = tf.zeros([1000])
         for j in range (1000):
+            j = j + 1
             ewm = tf.slice(r, [j], [1]) * tf.slice(h_previous, [j], [1])
             r_ewm_h_previous = r_ewm_h_previous + tf.sparse_tensor_to_dense(tf.SparseTensor([j], [ewm], [1000]))
         u_r_ewm_h_previous = tf.matmul(u, r_ewm_h_previous)
@@ -82,6 +84,7 @@ with graph.as_default():
         # Hidden calculation
         h = tf.zeros([1000])
         for j in range(1000):
+            j = h + 1
             #Update calculation
             zj = tf.sigmoid(tf.slice(wz_e, [j], [1]) + tf.slice(uz_ht_previous, [j], [1]))
             #h~ calculation
@@ -97,7 +100,7 @@ with graph.as_default():
     continue_sentence = True
     y_previous = tf.zeros([k])
     h_prime_previous = tf.tanh(tf.matmul(v_prime, c))
-    while (continue_sentence):
+    while (continue_sentence): #TODO: while y_previous is not EOS
         # Current vector's embedding
         e = tf.matmul(w_prime_e, y_previous)
         # Vectors for h~ calculation
@@ -116,6 +119,7 @@ with graph.as_default():
         # Hidden calculation
         h_prime = tf.zeros([1000])
         for j in range(1000):
+            j = j + 1
             r_prime_j = tf.sigmoid(tf.slice(wr_e, [j], [1]) + tf.slice(u_h_previous, [j], [1])
                                    + tf.slice(Cr_c, [j], 1))
             z_prime_j = tf.sigmoid(tf.slice(wz_e, [j], [1]) + tf.slice(uz_ht_previous, [j], [1])
@@ -128,10 +132,20 @@ with graph.as_default():
         s_prime = tf.matmul(oh, h_prime) + tf.matmul(oy, y_previous) + tf.matmul(oc, c)
         s = tf.zeros([1000])
         for i in range(1000):
-            s_i = max(tf.slice(s, [2*i-1], [1]), tf.slice(s, [2*i], [1]))
+            i = i + 1
+            s_i = max(tf.slice(s, [2*i-1], [1]), tf.slice(s, [2*i], [1])) #TODO: fix this, this is almost certainly wrong
             s = s + tf.sparse_tensor_to_dense(tf.SparseTensor([i], [s_i], [1000]))
 
         # Softmax calculation
         g = tf.matmul(gl, gr)
+        denominator = tf.zeros([1])
+        softmax = tf.zeros([k])
+        for j in range(k):
+            j = j + 1
+            g_j = tf.reshape(tf.slice(g, [j, 0], [1, 1000]), [1, 1000])
+            e_g_j_s = tf.exp(tf.matmul(g_j, s))
+            softmax = softmax + tf.sparse_tensor_to_dense(tf.SparseTensor([j], [e_g_j_s], [1000]))
+            denominator = denominator + tf.sparse_tensor_to_dense(tf.SparseTensor([1], [e_g_j_s], [1000]))
+        softmax = tf.matmul(softmax, tf.inverse(denominator))
 
         h_prime_previous = h_prime
