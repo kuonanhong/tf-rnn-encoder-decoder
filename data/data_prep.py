@@ -51,13 +51,13 @@ def build_dataset(sentences):
 
 fr_data, fr_count, fr_indeces = build_dataset(french)
 print('Most common words (+UNK)', fr_count[:5])
-pickle.dump(fr_data, open("../data/fr_data.p", "wb"))
-pickle.dump(fr_count, open("../data/fr_count.p", "wb"))
-pickle.dump(fr_indeces, open("../data/fr_indeces.p", "wb"))
+pickle.dump(fr_data, open("fr_data.p", "wb"))
+pickle.dump(fr_count, open("fr_count.p", "wb"))
+pickle.dump(fr_indeces, open("fr_indeces.p", "wb"))
 
 en_data, en_count, en_indeces = build_dataset(english)
 print('Most common words (+UNK)', en_count[:5])
 del english, french  # Hint to reduce memory.
-pickle.dump(en_data, open("../data/en_data.p", "wb"))
-pickle.dump(en_count, open("../data/en_count.p", "wb"))
-pickle.dump(en_indeces, open("../data/en_indeces.p", "wb"))
+pickle.dump(en_data, open("en_data.p", "wb"))
+pickle.dump(en_count, open("en_count.p", "wb"))
+pickle.dump(en_indeces, open("en_indeces.p", "wb"))
